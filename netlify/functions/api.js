@@ -239,7 +239,5 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// ============================================================
-// 导出为 Netlify Function
-// ============================================================
+app.get('/', (req, res) => res.json({ status: 'ok' }));
 module.exports.handler = serverless(app);
