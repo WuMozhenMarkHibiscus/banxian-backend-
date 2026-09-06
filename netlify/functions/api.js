@@ -3,7 +3,7 @@
 // 用途: 半贤书院文学社后端 - Netlify Functions 入口
 // 说明: 使用 Express + serverless-http 包装，导出为 Netlify Function
 // ============================================================
-
+console.log('✅ api.js loaded');
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
