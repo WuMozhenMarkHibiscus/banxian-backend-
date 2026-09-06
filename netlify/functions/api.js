@@ -1,24 +1,22 @@
 // ============================================================
 // 文件: netlify/functions/api.js
 // 用途: 半贤书院文学社后端 - Netlify Functions 入口
-// 说明: 使用 Express + serverless-http 包装，导出为 Netlify Function
 // ============================================================
-console.log('✅ api.js loaded');
+
 const express = require('express');
 const serverless = require('serverless-http');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 
-// --- 初始化 Express ---
+// 1. 初始化 Express（必须先做）
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- 从环境变量读取 Supabase 配置 ---
+// 2. 加载 Supabase 配置
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-// 如果环境变量未配置，给出明确提示（用于调试）
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ 错误: SUPABASE_URL 或 SUPABASE_ANON_KEY 环境变量未设置!');
 }
@@ -26,8 +24,15 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ============================================================
-//  1. 测试路由 - 用于验证函数是否部署成功
+//  1. 测试路由 - 验证函数是否部署成功
 // ============================================================
+app.get('/', (req, res) => {
+  res.json({
+    message: '✅ api is working',
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -38,13 +43,12 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================
-//  2. 注册接口 (完整版)
+//  2. 注册接口
 // ============================================================
 app.post('/api/register', async (req, res) => {
   try {
     const { name, phone, email, password, role } = req.body;
 
-    // 1. 校验必填字段
     if (!name || !phone || !password) {
       return res.status(400).json({
         code: 400,
@@ -52,14 +56,13 @@ app.post('/api/register', async (req, res) => {
       });
     }
 
-    // 2. 检查手机号是否已注册
     const { data: existingUser, error: findError } = await supabase
       .from('users')
       .select('id')
       .eq('phone', phone)
       .maybeSingle();
 
-    if (findError && findError.code !== 'PGRST116') { // PGRST116 是"未找到"的正常状态
+    if (findError && findError.code !== 'PGRST116') {
       console.error('❌ 查询用户错误:', findError);
       return res.status(500).json({
         code: 500,
@@ -74,12 +77,10 @@ app.post('/api/register', async (req, res) => {
       });
     }
 
-    // 3. 加密密码
     const bcrypt = require('bcrypt');
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // 4. 插入新用户
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert([{
@@ -100,7 +101,6 @@ app.post('/api/register', async (req, res) => {
       });
     }
 
-    // 5. 注册成功
     res.status(200).json({
       code: 200,
       msg: '注册成功',
@@ -117,7 +117,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ============================================================
-//  3. 登录接口 (精简版，先确保核心功能)
+//  3. 登录接口
 // ============================================================
 app.post('/api/login', async (req, res) => {
   try {
@@ -130,7 +130,6 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 查询用户
     let query = supabase.from('users').select('*');
     if (phone) {
       query = query.eq('phone', phone);
@@ -147,7 +146,6 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 验证密码
     const bcrypt = require('bcrypt');
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
@@ -157,7 +155,6 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 登录成功，返回用户信息（隐藏密码）
     const { password_hash, ...userInfo } = user;
     res.status(200).json({
       code: 200,
@@ -175,9 +172,6 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ============================================================
-//  4. 导出为 Netlify Function (关键!)
-// ============================================================
-// 注意: 必须使用 exports.handler = serverless(app) 格式
-//       不能使用 module.exports = app
+//  4. 导出为 Netlify Function（必须放在最后）
 // ============================================================
 module.exports.handler = serverless(app);
