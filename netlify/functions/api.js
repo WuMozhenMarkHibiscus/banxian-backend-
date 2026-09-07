@@ -1,38 +1,29 @@
 // ============================================================
-// 文件: netlify/functions/api.js
-// 用途: 半贤书院文学社后端 - Netlify Functions 入口
+// 文件: netlify/functions/api.js（路径不变，内容改成 Cloudflare 格式）
+// 用途: 半贤书院文学社后端 - Cloudflare Pages Functions 入口
 // ============================================================
 
-const express = require('express');
-const serverless = require('serverless-http');
-const cors = require('cors');
-const { createClient } = require('@supabase/supabase-js');
+import express from 'express';
+import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
 
-// 1. 初始化 Express（必须先做）
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 2. 加载 Supabase 配置
+// --- 从环境变量读取 Supabase 配置 ---
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ 错误: SUPABASE_URL 或 SUPABASE_ANON_KEY 环境变量未设置!');
+  console.error('❌ SUPABASE_URL 或 SUPABASE_ANON_KEY 环境变量未设置!');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ============================================================
-//  1. 测试路由 - 验证函数是否部署成功
+//  1. 健康检查
 // ============================================================
-app.get('/', (req, res) => {
-  res.json({
-    message: '✅ api is working',
-    timestamp: new Date().toISOString()
-  });
-});
-
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -45,7 +36,7 @@ app.get('/health', (req, res) => {
 // ============================================================
 //  2. 注册接口
 // ============================================================
-app.post('/api/register', async (req, res) => {
+app.post('/register', async (req, res) => {
   try {
     const { name, phone, email, password, role } = req.body;
 
@@ -77,7 +68,7 @@ app.post('/api/register', async (req, res) => {
       });
     }
 
-    const bcrypt = require('bcrypt');
+    const bcrypt = (await import('bcrypt')).default;
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
@@ -108,7 +99,7 @@ app.post('/api/register', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ 注册接口未捕获异常:', err);
+    console.error('❌ 注册接口异常:', err);
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误，请稍后重试'
@@ -119,7 +110,7 @@ app.post('/api/register', async (req, res) => {
 // ============================================================
 //  3. 登录接口
 // ============================================================
-app.post('/api/login', async (req, res) => {
+app.post('/login', async (req, res) => {
   try {
     const { phone, email, password } = req.body;
 
@@ -146,7 +137,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    const bcrypt = require('bcrypt');
+    const bcrypt = (await import('bcrypt')).default;
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
       return res.status(400).json({
@@ -163,7 +154,7 @@ app.post('/api/login', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ 登录接口未捕获异常:', err);
+    console.error('❌ 登录接口异常:', err);
     res.status(500).json({
       code: 500,
       msg: '服务器内部错误'
@@ -172,6 +163,19 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ============================================================
-//  4. 导出为 Netlify Function（必须放在最后）
+//  4. 导出为 Cloudflare Pages Function
 // ============================================================
-module.exports.handler = serverless(app);
+export default {
+  async fetch(request, env, ctx) {
+    // Cloudflare Pages 会把 /api/* 的请求转发到这里
+    // 但需要把路径中的 /api 去掉，因为 Express 里定义的路径没有 /api
+    const url = new URL(request.url);
+    if (url.pathname.startsWith('/api')) {
+      // 重写路径，去掉 /api 前缀
+      const newUrl = new URL(request.url);
+      newUrl.pathname = url.pathname.replace('/api', '');
+      request = new Request(newUrl.toString(), request);
+    }
+    return app(request, env, ctx);
+  }
+};
